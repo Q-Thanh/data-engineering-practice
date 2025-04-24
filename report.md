@@ -415,9 +415,9 @@ if \_\_name\_\_ == "\_\_main\_\_":
 
 ## EXERCISE-5
 
-> 1.Thay đổi thư mục tại CMD thành `Exercise-4`
+> 1.Thay đổi thư mục tại CMD thành `Exercise-5`
 
-> 2. Chạy lệnh docker `build --tag=exercise-4 .` để build image Docker (Quá trình diễn ra trong 2 – 3 phút)
+> 2. Chạy lệnh docker `build --tag=exercise-5 .` để build image Docker (Quá trình diễn ra trong 2 – 3 phút)
 > ![image](https://github.com/user-attachments/assets/3eb12b93-1146-4adf-bba8-5ad4cc3750fd)
 
 #### Nội dung file main.py:
