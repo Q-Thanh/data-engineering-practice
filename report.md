@@ -23,7 +23,7 @@
 > 1. Thực thi lệnh sau trong CMD: git clone để clone GitHub repo về máy của mình
 ![image](https://github.com/user-attachments/assets/9d638ee5-8343-43e5-b3c9-7f08d1101a2f)
 
-> 2. Sau đó tiến hành chạy lệnh `cd data-engineering-practice/Exercises/Exercise-1` để truy cập vào thư mục Exercise-1
+> 2. Sau đó tiến hành chạy lệnh `cd data-engineering-practice/Exercises/Exercise-1` để thay đổi đường dẫn thư mục Exercise-1
 
 > 3. Tiếp tục thực hiện lệnh: `docker build --tag=exercise-1 .` để build Docker image Quá trình sẽ mất vài phút
 ![image](https://github.com/user-attachments/assets/852153d1-d493-47ea-b267-8a5b6843be07)
@@ -131,7 +131,7 @@ if \_\_name\_\_ == "\_\_main\_\_":
 
 ## EXERCISE 2
 
-> 1. Thay đổi thư mục tại CMD thành `Exercise-2`
+> 1. Thay đổi đường dẫn thư mục tại CMD thành `Exercise-2`
 
 > 2. Chạy lệnh docker `build --tag=exercise-2 .` để build image Docker (Quá trình diễn ra trong 2 – 3 phút)
 > ![image](https://github.com/user-attachments/assets/d3bb854c-f8e2-4a35-b4f8-dde609d5d8ff)
@@ -247,19 +247,19 @@ if \_\_name\_\_ == "\_\_main\_\_":
     main()
 ```
 
-> 4. Sau khi save file main.py, chạy dòng lệnh docker-compose up run
+> 4. Sau khi save file main.py, chạy dòng lệnh `docker-compose up run`
 
 > 5. Kết quả thu được
 > ![image](https://github.com/user-attachments/assets/ef39d0c0-2d63-40d6-b162-63a8d6f9552d)
 
 ## EXERCISE 3
 
-> 1. Thay đổi thư mục tại CMD thành `Exercise-3`
+> 1. Thay đổi đường dẫn thư mục tại CMD thành `Exercise-3`
 
 > 2. Chạy lệnh docker `build --tag=exercise-3 .` để build image Docker (Quá trình diễn ra trong 2 – 3 phút)
 > ![image](https://github.com/user-attachments/assets/b4dc7f5e-843b-4e94-810b-596e8595e37e)
 
-> 3. Sau khi build xong, truy cập file main.py bằng VS code
+> 3. Sau khi build xong, truy cập file `main.py` bằng VS code
 
 ##### Code sử dụng cho main.py:
 ```
@@ -301,12 +301,12 @@ if __name__ == "__main__":
 
 ## EXERCISE-4
 
-> 1. Thay đổi thư mục tại CMD thành `Exercise-4`
+> 1. Thay đổi đường dẫn thư mục tại CMD thành `Exercise-4`
 
 > 2. Chạy lệnh docker `build --tag=exercise-4 .` để build image Docker (Quá trình diễn ra trong 2 – 3 phút)
 > ![image](https://github.com/user-attachments/assets/0429e78f-9d6b-4c9c-8d67-c06d6831a270)
 
-> 3. Nội dung file main.py
+> 3. Nội dung file `main.py`
 ```
 import os
 import json
@@ -404,7 +404,7 @@ if \_\_name\_\_ == "\_\_main\_\_":
     main()
 ```
 
-> 4. Sau khi save file main.py, thực thi lệnh `docker-compose up run`
+> 4. Sau khi save file ` main.py`, thực thi lệnh `docker-compose up run`
 > 5. Kết quả sau khi thực hiện:
 
 ![image](https://github.com/user-attachments/assets/52637e8a-7e04-48de-9cfc-7dc66e3c5ea5)
@@ -415,7 +415,7 @@ if \_\_name\_\_ == "\_\_main\_\_":
 
 ## EXERCISE-5
 
-> 1.Thay đổi thư mục tại CMD thành `Exercise-5`
+> 1.Thay đổi đường dẫn thư mục tại CMD thành `Exercise-5`
 
 > 2. Chạy lệnh docker `build --tag=exercise-5 .` để build image Docker (Quá trình diễn ra trong 2 – 3 phút)
 > ![image](https://github.com/user-attachments/assets/3eb12b93-1146-4adf-bba8-5ad4cc3750fd)
