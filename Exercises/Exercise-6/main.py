@@ -1,3 +1,4 @@
+from pyspark.sql import SparkSession
 from pyspark.sql.functions import avg, count, to_date, date_format, col, desc, expr
 from pyspark.sql.window import Window
 import zipfile
@@ -132,6 +133,7 @@ def main():
     top_3_trip_stations_last_two_weeks(df, reports_folder)
     avg_trip_duration_by_gender(df, reports_folder)
     top_10_ages_by_trip_duration(df, reports_folder)
+
 
 # Khi chạy file trực tiếp thì thực hiện hàm main()
 if __name__ == "__main__":
