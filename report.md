@@ -875,3 +875,22 @@ with DAG(
 
 > ![image](https://github.com/user-attachments/assets/b889a380-7201-49db-af30-2384068a9653)
 >![image](https://github.com/user-attachments/assets/5c9d74f3-9391-4b29-8a4a-6bc10718b474)
+
+> # REPORT - LAB 8:
+## EXERCISE 1
+
+> 1. Thực thi lệnh sau trong CMD: git clone để clone GitHub repo về máy của mình
+> ![649dabe12114934aca05](https://github.com/user-attachments/assets/d4b2284b-1f99-4733-95e8-388c142eeb00)
+
+
+> 2. Sau đó tiến hành chạy lệnh `cd cd Build-data-warehouse-with-Airflow-Python-for-E-commerce
+
+> 3. Tiếp tục thực hiện lệnh: 'docker-compose up -d' để build Docker image Quá trình sẽ mất vài phút
+> ![Annotation 2025-05-06 211724](https://github.com/user-attachments/assets/44cda780-fdd2-4535-8973-e4596bcdad04)
+
+> 4. Mở Airflow Web UI để xem quá trình chạy
+> Mặc định, Airflow Web UI sẽ chạy tại: http://localhost:8080
+> ![Annotation 2025-05-06 215312](https://github.com/user-attachments/assets/81a636bf-8c9c-492a-a5f3-bab8aeffe751)
+> ![image](https://github.com/user-attachments/assets/93b7b823-de6b-4931-9f7b-133ba179dcf9)
+> 5. Check lại trong dbeaver
+> ![image](https://github.com/user-attachments/assets/733cbed6-c76c-44fa-8223-4d9a6f936319)
