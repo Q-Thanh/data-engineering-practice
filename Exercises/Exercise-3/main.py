@@ -1,88 +1,83 @@
-import boto3
-from botocore import UNSIGNED
-from botocore.client import Config
+import requests
 import gzip
 import io
-import os
 import sys # Để ghi trực tiếp ra stdout, đôi khi hữu ích cho streaming
 
-# Endpoint S3 cho us-east-1
-S3_ENDPOINT_URL = 'https://s3.us-east-1.amazonaws.com'
+# URL gốc của Common Crawl
+COMMON_CRAWL_BASE_URL = 'https://data.commoncrawl.org'
+
+def download_file(url):
+    """Tải tệp từ URL và trả về nội dung"""
+    print(f"Đang tải tệp từ URL: {url}")
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Phát sinh ngoại lệ nếu status code không phải 2xx
+        return response.content
+    except requests.exceptions.RequestException as e:
+        print(f"Đã xảy ra lỗi khi tải tệp: {e}", file=sys.stderr)
+        raise
+
+def s3_uri_to_http_url(uri):
+    """Chuyển đổi S3 URI hoặc đường dẫn tương đối thành URL HTTP cho Common Crawl"""
+    if uri.startswith('s3://'):
+        s3_path = uri[len('s3://'):]
+        # Bỏ qua phần bucket (thường là 'commoncrawl')
+        path = s3_path[s3_path.find('/') + 1:]
+        return f"{COMMON_CRAWL_BASE_URL}/{path}"
+    else:
+        # Nếu là đường dẫn tương đối, sử dụng trực tiếp
+        return f"{COMMON_CRAWL_BASE_URL}/{uri}"
 
 def main():
-# --- Định nghĩa các tham số ---
-    # Bucket S3 chứa dữ liệu Common Crawl
-    COMMON_CRAWL_BUCKET = 'commoncrawl'
-    # Khóa (key) của tệp .gz chứa danh sách các tệp WET paths
-    WET_PATHS_GZ_KEY = 'crawl-data/CC-MAIN-2022-05/wet.paths.gz'
+    # --- Định nghĩa các tham số ---
+    # URL của tệp wet.paths.gz
+    WET_PATHS_URL = f"{COMMON_CRAWL_BASE_URL}/crawl-data/CC-MAIN-2022-05/wet.paths.gz"
 
     print(f"--- Bắt đầu xử lý dữ liệu Common Crawl ---")
 
     try:
-        # --- Bước 1: Khởi tạo S3 client ---
-        # Tạo một S3 client với cấu hình đặc biệt để truy cập dữ liệu Common Crawl
-        # - use_ssl=True để đảm bảo kết nối an toàn
-        # - verify=True để xác minh chứng chỉ SSL
-        # - signature_version=UNSIGNED vì dữ liệu Common Crawl là public
-        # - region_name='us-east-1' là region của dữ liệu Common Crawl
-        s3_config = Config(
-            signature_version=UNSIGNED, 
-            s3={'addressing_style': 'path'},  # Sử dụng path-style URLs
-            region_name='us-east-1'
-        )
-        s3 = boto3.client('s3', config=s3_config)
-        print(f"1. Đã kết nối thành công với S3 (chế độ unsigned, path-style URLs).")
+        # --- Bước 1: Tải tệp .gz ban đầu ---
+        print(f"1. Đang tải tệp wet.paths.gz từ {WET_PATHS_URL}")
+        gz_content = download_file(WET_PATHS_URL)
+        print(f"   Đã tải xong {len(gz_content)} bytes.")
 
-        # --- Bước 2: Tải tệp .gz ban đầu VÀO BỘ NHỚ ---
-        print(f"2. Đang tải tệp '{WET_PATHS_GZ_KEY}' từ bucket '{COMMON_CRAWL_BUCKET}' vào bộ nhớ...")
-        response = s3.get_object(Bucket=COMMON_CRAWL_BUCKET, Key=WET_PATHS_GZ_KEY)
-        gz_body_bytes = response['Body'].read()
-        gz_bytes_io = io.BytesIO(gz_body_bytes)
-        print(f"   Đã tải xong {len(gz_body_bytes)} bytes vào bộ nhớ.")
+        # --- Bước 2: Giải nén và đọc tệp .gz ---
+        print(f"2. Đang giải nén và đọc dòng đầu tiên...")
+        with gzip.GzipFile(fileobj=io.BytesIO(gz_content), mode='rb') as gz_file:
+            wet_uri = gz_file.readline().decode('utf-8').strip()
 
-        # --- Bước 3: Giải nén và đọc tệp .gz ---
-        print(f"3. Đang giải nén và đọc dòng đầu tiên từ bộ nhớ...")
-        with gzip.GzipFile(fileobj=gz_bytes_io, mode='rb') as gz_file:
-            first_line_bytes = gz_file.readline()
-            wet_paths_uri = first_line_bytes.decode('utf-8').strip()
+        print(f"   Dòng đầu tiên (URI tệp WET) là: {wet_uri}")
 
-        print(f"   Dòng đầu tiên (URI tệp WET) là: {wet_paths_uri}")
+        # --- Bước 3: Chuyển đổi S3 URI thành URL HTTP ---
+        wet_url = s3_uri_to_http_url(wet_uri)
+        print(f"3. URL của tệp WET: {wet_url}")
 
-        # --- Bước 4: Phân tích URI để lấy bucket và key của tệp WET ---
-        if wet_paths_uri.startswith('s3://'):
-            s3_path = wet_paths_uri[len('s3://'):]
-        else:
-            raise ValueError(f"URI không đúng định dạng S3: {wet_paths_uri}")
+        # --- Bước 4: Tải tệp WET và xử lý ---
+        print(f"4. Đang tải tệp WET...")
+        wet_content = download_file(wet_url)
+        print(f"   Đã tải tệp WET thành công ({len(wet_content)} bytes).")
 
-        first_slash_index = s3_path.find('/')
-        if first_slash_index == -1:
-            raise ValueError(f"URI không đúng định dạng (thiếu key): {wet_paths_uri}")
+        # --- Bước 5: Xử lý và hiển thị nội dung tệp WET ---
+        print(f"5. Nội dung của tệp WET:")
+        wet_fileobj = io.BytesIO(wet_content)
+        # WET files are gzipped, so we need to decompress them
+        with gzip.GzipFile(fileobj=wet_fileobj, mode='rb') as wet_file:
+            line_count = 0
+            for line in wet_file:
+                decoded_line = line.decode('utf-8', errors='replace').rstrip('\r\n')
+                print(decoded_line)
+                line_count += 1
+                # Giới hạn số dòng hiển thị để tránh quá nhiều đầu ra
+                if line_count >= 100:
+                    print("... (còn nhiều dòng khác)")
+                    break
 
-        wet_bucket = s3_path[:first_slash_index]
-        wet_key = s3_path[first_slash_index + 1:]
-
-        print(f"4. Đã phân tích URI:")
-        print(f"   - Bucket của tệp WET: {wet_bucket}")
-        print(f"   - Key của tệp WET: {wet_key}")
-
-        # --- Bước 5: Tải tệp WET và in từng dòng theo luồng ---
-        print(f"5. Đang tải tệp '{wet_key}' và in từng dòng (streaming)...")
-        # Cũng để bucket trống khi yêu cầu tệp WET
-        wet_file_response = s3.get_object(Bucket='', Key=wet_key)
-        wet_streaming_body = wet_file_response['Body']
-
-        line_count = 0
-        for line in wet_streaming_body.iter_lines():
-            print(line.decode('utf-8').rstrip('\r\n'))
-            line_count += 1
-
-        print(f"   Đã in xong {line_count} dòng từ tệp WET.")
+        print(f"   Đã hiển thị {line_count} dòng từ tệp WET.")
         print(f"--- Hoàn thành xử lý ---")
 
     except Exception as e:
-        # Xử lý các lỗi có thể xảy ra trong quá trình (ví dụ: tệp không tồn tại, lỗi mạng, lỗi giải nén, lỗi phân tích URI).
         print(f"Đã xảy ra lỗi: {e}", file=sys.stderr)
-        sys.exit(1) # Thoát với mã lỗi để báo hiệu thất bại
+        sys.exit(1)  # Thoát với mã lỗi để báo hiệu thất bại
 
 
 if __name__ == "__main__":
