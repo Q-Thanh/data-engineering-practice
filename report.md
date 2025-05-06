@@ -894,3 +894,167 @@ with DAG(
 > ![image](https://github.com/user-attachments/assets/93b7b823-de6b-4931-9f7b-133ba179dcf9)
 > 5. Check lại trong dbeaver
 > ![image](https://github.com/user-attachments/assets/733cbed6-c76c-44fa-8223-4d9a6f936319)
+## EXERCISE 2
+
+> 1. Chuẩn bị môi trường làm việc:
+
+Tạo một thư mục dự án riêng biệt trên hệ thống máy tính để chứa tất cả các file cấu hình và mã nguồn liên quan đến Airflow.
+
+Bên trong thư mục dự án, tạo một thư mục con có tên là dags. Đây là nơi sẽ chứa các file định nghĩa DAG của Airflow (các file .py).
+
+Đặt các file định nghĩa DAG đã có sẵn (simple_dag_local.py, complex_dag_local.py, miai_dag.py, sensor_local.py) vào thư mục dags vừa tạo.
+![image](https://github.com/user-attachments/assets/a7fecc65-8c3d-4927-8225-db3aaef9fc20)
+
+
+> 2. Xây dựng file cấu hình Docker Compose (docker-compose.yaml):
+
+Tạo file docker-compose.yaml ở thư mục gốc của dự án.
+
+Cấu hình các dịch vụ cần thiết để chạy Airflow:
+
+Dịch vụ Cơ sở dữ liệu (PostgreSQL): Định nghĩa một dịch vụ sử dụng image PostgreSQL để làm cơ sở dữ liệu lưu trữ metadata của Airflow. Cấu hình tên database, người dùng và mật khẩu phù hợp với yêu cầu của Airflow. Sử dụng Docker Volume để đảm bảo dữ liệu database được lưu trữ bền vững.
+
+Dịch vụ Airflow: Định nghĩa một dịch vụ sử dụng image Apache Airflow. Cấu hình dịch vụ này để phụ thuộc vào dịch vụ cơ sở dữ liệu, đảm bảo database sẵn sàng trước khi Airflow khởi động. Ánh xạ (mount) thư mục dags từ máy host vào thư mục DAGs bên trong container Airflow. Cấu hình cổng (port) để truy cập giao diện web của Airflow từ máy host (mặc định là 8080).
+code file docker-compose.yml:
+```
+# Sử dụng phiên bản Docker Compose
+# Bạn có thể xóa dòng version: '3' để tránh cảnh báo obsolete nếu muốn
+version: '3'
+
+# Định nghĩa các dịch vụ (services)
+services:
+  # Dịch vụ cơ sở dữ liệu PostgreSQL cho Airflow metadata
+  postgres:
+    image: postgres:14 # Sử dụng image PostgreSQL phiên bản 14
+    environment:
+      # Cấu hình thông tin đăng nhập và tên database cho PostgreSQL
+      # Airflow sẽ sử dụng database có tên 'airflow'
+      - POSTGRES_USER=airflow # <-- Tên người dùng database (có thể đổi)
+      - POSTGRES_PASSWORD=airflow # <-- Mật khẩu database (có thể đổi)
+      - POSTGRES_DB=airflow # <-- Tên database mà Airflow sẽ kết nối
+    volumes:
+      # Lưu trữ dữ liệu của database vào một volume để dữ liệu không bị mất khi container dừng/xóa
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Ánh xạ cổng 5432 của container ra cổng 5432 trên máy host (tùy chọn, hữu ích cho việc debug database)
+      - "5432:5432"
+    networks:
+      # Kết nối dịch vụ này vào mạng nội bộ 'airflow-network'
+      - airflow-network
+    healthcheck: # Kiểm tra tình trạng sức khỏe của database
+      test: [ "CMD", "pg_isready", "-U", "airflow" ] # Lệnh kiểm tra
+      interval: 5s # Kiểm tra mỗi 5 giây
+      retries: 5 # Thử lại 5 lần nếu lỗi
+
+  # Dịch vụ Airflow
+  airflow:
+    image: apache/airflow:2.6.3 # Sử dụng image Airflow phiên bản 2.6.3
+    depends_on:
+      # Airflow phụ thuộc vào database, đảm bảo postgres khởi động trước
+      postgres:
+        condition: service_healthy # Chờ cho dịch vụ postgres ở trạng thái healthy
+    volumes:
+      # Ánh xạ thư mục 'dags' trên máy host vào thư mục DAGs bên trong container Airflow
+      # Đây là nơi bạn sẽ đặt các file DAG của mình
+      - ./dags:/opt/airflow/dags # <-- Thư mục DAGs trên host : Thư mục DAGs trong container
+      # Ánh xạ các thư mục khác nếu DAG của bạn cần đọc/ghi file ở ngoài thư mục DAGs
+      # Ví dụ:
+      # - ./data:/opt/airflow/data # Thư mục data cho Complex DAG
+      # - ./stock_data:/opt/airflow/stock_data # Thư mục stock_data cho ML DAG
+      # - ./models:/opt/airflow/models # Thư mục models cho ML DAG
+      # - ./data_in:/opt/airflow/data_in # Thư mục input cho Sensor DAG
+    ports:
+      # Ánh xạ cổng 8080 của webserver Airflow ra cổng 8080 trên máy host
+      - "8080:8080" # <-- Cổng trên host : Cổng webserver trong container
+    command: standalone # Chạy Airflow ở chế độ standalone (bao gồm webserver và scheduler)
+    environment:
+      # Cấu hình kết nối database cho Airflow
+      # Đảm bảo thông tin này khớp với thông tin trong service postgres
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow # <-- Thông tin kết nối DB
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False # Không tải các DAG ví dụ đi kèm Airflow
+      # Cấu hình múi giờ (tùy chọn)
+      # - AIRFLOW__CFG__CORE__DEFAULT_TIMEZONE=Asia/Ho_Chi_Minh # <-- Đổi múi giờ nếu cần
+
+      # Tăng thời gian timeout cho Gunicorn webserver
+      - AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT=300 # <-- THÊM hoặc SỬA dòng này, tăng timeout lên 300 giây (5 phút)
+
+    networks:
+      # Kết nối dịch vụ này vào mạng nội bộ 'airflow-network'
+      - airflow-network
+    healthcheck: # Kiểm tra tình trạng sức khỏe của Airflow webserver
+      test: [ "CMD", "curl", "--fail", "-s", "http://localhost:8080/health" ] # Lệnh kiểm tra
+      interval: 30s # Kiểm tra mỗi 30 giây
+      timeout: 30s # Timeout sau 30 giây
+      retries: 5 # Thử lại 5 lần nếu lỗi
+
+# Định nghĩa mạng nội bộ cho các dịch vụ
+networks:
+  airflow-network:
+    driver: bridge # Sử dụng driver mạng bridge
+
+# Định nghĩa các volume để lưu trữ dữ liệu bền vững
+volumes:
+  postgres_data: # Volume cho dữ liệu PostgreSQL
+
+```
+
+> 3. Tạo Dockerfile tùy chỉnh để cài đặt Dependencies:
+
+Tạo file Dockerfile ở thư mục gốc của dự án.
+
+Sử dụng image Apache Airflow gốc làm nền (FROM apache/airflow:...).
+
+Thêm các lệnh RUN pip install để cài đặt các thư viện Python bổ sung mà các file DAG phức tạp cần (ví dụ: pymysql, pandas, sendgrid, scikit-learn, tensorflow). Điều này đảm bảo các DAG có thể được import và chạy mà không gặp lỗi thiếu thư viện.
+
+Chỉnh sửa file docker-compose.yaml để dịch vụ Airflow sử dụng build: . thay vì image: ..., chỉ định Docker Compose xây dựng image từ Dockerfile này.
+code dockerfile:
+```
+# Sử dụng image Airflow gốc làm nền
+FROM apache/airflow:2.6.3
+
+# Cài đặt các thư viện Python bổ sung mà các DAG của bạn cần
+# Dựa trên các file DAG bạn cung cấp, chúng ta cần pymysql, pandas, sendgrid
+# Bạn có thể thêm các thư viện khác vào đây nếu DAG của bạn cần
+RUN pip install --no-cache-dir \
+    pymysql \
+    pandas \
+    sendgrid \
+    scikit-learn \
+    tensorflow
+    # Thêm các thư viện khác nếu cần, ví dụ:
+    # scikit-learn \ # Cho miai_dag.py
+    # tensorflow # Cho miai_dag.py
+
+```
+
+> 4. Khởi động môi trường Airflow:
+
+Mở terminal hoặc command prompt và điều hướng đến thư mục gốc của dự án.
+
+Chạy lệnh docker compose up -d --build. Lệnh này sẽ:
+
+Build image Docker tùy chỉnh cho dịch vụ Airflow (bao gồm cả việc cài đặt các thư viện bổ sung).
+
+Tải image PostgreSQL (nếu chưa có).
+
+Tạo và khởi động các container cho dịch vụ cơ sở dữ liệu và Airflow ở chế độ nền.
+
+Tạo người dùng quản trị đầu tiên:
+
+Sau khi các container khởi động và dịch vụ Airflow đã sẵn sàng (có thể mất vài phút), sử dụng lệnh docker compose exec để chạy lệnh Airflow CLI bên trong container Airflow nhằm tạo người dùng quản trị đầu tiên. Lệnh có dạng: docker compose exec airflow bash -c "airflow users create --username <tên> --password <mật khẩu> --firstname <tên> --lastname <họ> --email <email> --role Admin".
+![image](https://github.com/user-attachments/assets/35d865b8-644f-423d-83ae-ad476c307d85)
+![image](https://github.com/user-attachments/assets/a107abdb-486b-4029-b60e-3cc07cdbbab0)
+![image](https://github.com/user-attachments/assets/10fc7c4e-a329-450b-b8d7-8003a177d087)
+
+
+> 5. Truy cập giao diện web và kích hoạt DAGs:
+
+Mở trình duyệt web và truy cập địa chỉ http://localhost:8080.
+
+Đăng nhập bằng thông tin tài khoản quản trị vừa tạo.
+
+Trên giao diện web, kiểm tra danh sách các DAG. Các DAG đã copy vào thư mục dags sẽ xuất hiện.
+
+Kích hoạt (Unpause) các DAG mong muốn bằng cách nhấn vào nút gạt bên cạnh tên DAG.
+![image](https://github.com/user-attachments/assets/270c0a38-4637-4f1b-8a97-50c50608cf6e)
+
