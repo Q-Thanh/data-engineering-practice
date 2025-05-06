@@ -1,4 +1,6 @@
+import os
 import requests
+import zipfile
 
 download_uris = [
     "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2018_Q4.zip",
@@ -7,14 +9,41 @@ download_uris = [
     "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2019_Q3.zip",
     "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2019_Q4.zip",
     "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2020_Q1.zip",
-    "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2220_Q1.zip",
+    "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2220_Q1.zip",  # lỗi URL để test
 ]
 
+DOWNLOAD_DIR = "downloads"
+
+def download_and_extract(url):
+    filename = url.split("/")[-1]
+    zip_path = os.path.join(DOWNLOAD_DIR, filename)
+
+    try:
+        print(f"Downloading: {filename}")
+        response = requests.get(url)
+        response.raise_for_status()
+
+        with open(zip_path, "wb") as f:
+            f.write(response.content)
+
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(DOWNLOAD_DIR)
+
+        os.remove(zip_path)
+        print(f"✓ Done: {filename}")
+
+    except requests.exceptions.HTTPError as http_err:
+        print(f"❌ HTTP error for {filename}: {http_err}")
+    except zipfile.BadZipFile:
+        print(f"❌ Not a valid zip file: {filename}")
+    except Exception as e:
+        print(f"❌ Failed {filename}: {e}")
 
 def main():
-    # your code here
-    pass
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
+    for url in download_uris:
+        download_and_extract(url)
 
 if __name__ == "__main__":
     main()
