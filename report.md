@@ -244,46 +244,103 @@ if __name__ == "__main__":
 > 1. Thay đổi đường dẫn thư mục tại CMD thành `Exercise-3`
 
 > 2. Chạy lệnh docker `build --tag=exercise-3 .` để build image Docker (Quá trình diễn ra trong 2 – 3 phút)
-> ![image](https://github.com/user-attachments/assets/b4dc7f5e-843b-4e94-810b-596e8595e37e)
+> ![image](https://github.com/user-attachments/assets/19b9503f-2c9b-4fcc-8476-1dfcb0a388a9)
+
 
 > 3. Sau khi build xong, truy cập file `main.py` bằng VS code
 
 ##### Code sử dụng cho main.py:
 ```
-import io
-import gzip
 import requests
-from dotenv import load_dotenv
+import gzip
+import io
+import sys # Để ghi trực tiếp ra stdout, đôi khi hữu ích cho streaming
 
-load_dotenv()
-def download_file_from_url(url):
-    response = requests.get(url)
-    if response.status_code == 200:
+# URL gốc của Common Crawl
+COMMON_CRAWL_BASE_URL = 'https://data.commoncrawl.org'
+
+def download_file(url):
+    """Tải tệp từ URL và trả về nội dung"""
+    print(f"Đang tải tệp từ URL: {url}")
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Phát sinh ngoại lệ nếu status code không phải 2xx
         return response.content
+    except requests.exceptions.RequestException as e:
+        print(f"Đã xảy ra lỗi khi tải tệp: {e}", file=sys.stderr)
+        raise
+
+def s3_uri_to_http_url(uri):
+    """Chuyển đổi S3 URI hoặc đường dẫn tương đối thành URL HTTP cho Common Crawl"""
+    if uri.startswith('s3://'):
+        s3_path = uri[len('s3://'):]
+        # Bỏ qua phần bucket (thường là 'commoncrawl')
+        path = s3_path[s3_path.find('/') + 1:]
+        return f"{COMMON_CRAWL_BASE_URL}/{path}"
     else:
-        print(f"Error downloading file: {response.status_code}")
-        return None
+        # Nếu là đường dẫn tương đối, sử dụng trực tiếp
+        return f"{COMMON_CRAWL_BASE_URL}/{uri}"
+
 def main():
-    url = 'https://data.commoncrawl.org/crawl-data/CC-MAIN-2022-05/wet.paths.gz'
-    gz_content = download_file_from_url(url)
-    
-    if gz_content:
-        with gzip.GzipFile(fileobj=io.BytesIO(gz_content)) as f:
-            first_line = f.readline().decode('utf-8').strip() 
-            print(f"First line from wet.paths.gz: {first_line}")
-            uri = first_line
-            print(f"Extracted URI: {uri}")
-            print("\nPrinting the first 50 lines from wet.paths.gz:")
-            for i, line in enumerate(f):
-                if i >= 50:  
+    # --- Định nghĩa các tham số ---
+    # URL của tệp wet.paths.gz
+    WET_PATHS_URL = f"{COMMON_CRAWL_BASE_URL}/crawl-data/CC-MAIN-2022-05/wet.paths.gz"
+
+    print(f"--- Bắt đầu xử lý dữ liệu Common Crawl ---")
+
+    try:
+        # --- Bước 1: Tải tệp .gz ban đầu ---
+        print(f"1. Đang tải tệp wet.paths.gz từ {WET_PATHS_URL}")
+        gz_content = download_file(WET_PATHS_URL)
+        print(f"   Đã tải xong {len(gz_content)} bytes.")
+
+        # --- Bước 2: Giải nén và đọc tệp .gz ---
+        print(f"2. Đang giải nén và đọc dòng đầu tiên...")
+        with gzip.GzipFile(fileobj=io.BytesIO(gz_content), mode='rb') as gz_file:
+            wet_uri = gz_file.readline().decode('utf-8').strip()
+
+        print(f"   Dòng đầu tiên (URI tệp WET) là: {wet_uri}")
+
+        # --- Bước 3: Chuyển đổi S3 URI thành URL HTTP ---
+        wet_url = s3_uri_to_http_url(wet_uri)
+        print(f"3. URL của tệp WET: {wet_url}")
+
+        # --- Bước 4: Tải tệp WET và xử lý ---
+        print(f"4. Đang tải tệp WET...")
+        wet_content = download_file(wet_url)
+        print(f"   Đã tải tệp WET thành công ({len(wet_content)} bytes).")
+
+        # --- Bước 5: Xử lý và hiển thị nội dung tệp WET ---
+        print(f"5. Nội dung của tệp WET:")
+        wet_fileobj = io.BytesIO(wet_content)
+        # WET files are gzipped, so we need to decompress them
+        with gzip.GzipFile(fileobj=wet_fileobj, mode='rb') as wet_file:
+            line_count = 0
+            for line in wet_file:
+                decoded_line = line.decode('utf-8', errors='replace').rstrip('\r\n')
+                print(decoded_line)
+                line_count += 1
+                # Giới hạn số dòng hiển thị để tránh quá nhiều đầu ra
+                if line_count >= 100:
+                    print("... (còn nhiều dòng khác)")
                     break
-                print(line.decode('utf-8').strip()) 
+
+        print(f"   Đã hiển thị {line_count} dòng từ tệp WET.")
+        print(f"--- Hoàn thành xử lý ---")
+
+    except Exception as e:
+        print(f"Đã xảy ra lỗi: {e}", file=sys.stderr)
+        sys.exit(1)  # Thoát với mã lỗi để báo hiệu thất bại
+
+
 if __name__ == "__main__":
     main()
+
 ```
 > 4. Sau khi lưu file `main.py`, thực hiện lệnh `docker-compose up run`
 > 5. Kết quả sau khi thực hiện
-![Screenshot 2025-04-24 133824](https://github.com/user-attachments/assets/9b19ff56-eee5-41e7-a62b-5050c8958066)
+> ![image](https://github.com/user-attachments/assets/fc59b0b3-f477-43cc-9d15-0f07215786a1)
+
 
 
 ## EXERCISE-4
@@ -291,114 +348,114 @@ if __name__ == "__main__":
 > 1. Thay đổi đường dẫn thư mục tại CMD thành `Exercise-4`
 
 > 2. Chạy lệnh docker `build --tag=exercise-4 .` để build image Docker (Quá trình diễn ra trong 2 – 3 phút)
-> ![image](https://github.com/user-attachments/assets/0429e78f-9d6b-4c9c-8d67-c06d6831a270)
+> ![image](https://github.com/user-attachments/assets/086ebd6b-8fb8-4996-8b61-ea52b64207b7)
+
 
 > 3. Nội dung file `main.py`
 ```
-import os
 import json
 import csv
 import glob
+import os
 
-def flatten\_json(nested\_json, parent\_key='', sep='\_'):
+def flatten_json(json_obj, parent_key='', sep='_'):
+    """
+    Làm phẳng một đối tượng JSON có cấu trúc lồng nhau.
+    
+    Args:
+        json_obj: Đối tượng JSON cần làm phẳng
+        parent_key: Khóa cha (sử dụng để đệ quy)
+        sep: Ký tự phân tách giữa khóa cha và con
+    
+    Returns:
+        dict: Dictionary đã được làm phẳng
+    """
+    flattened = {}
+    
+    # Duyệt qua tất cả các cặp key-value trong json_obj
+    for key, value in json_obj.items():
+        # Tạo tên khóa mới bằng cách nối khóa cha và khóa hiện tại
+        new_key = f"{parent_key}{sep}{key}" if parent_key else key
+        
+        # Nếu giá trị là từ điển (dict), gọi đệ quy để làm phẳng nó
+        if isinstance(value, dict):
+            # Cập nhật flattened với kết quả từ hàm đệ quy
+            flattened.update(flatten_json(value, new_key, sep))
+        else:
+            # Nếu không phải dict, gán giá trị trực tiếp
+            flattened[new_key] = value
+    
+    return flattened
 
-    """Giải nén JSON lồng nhau thành cấu trúc phẳng (flat structure)"""
-
-    items = []
-
-    if isinstance(nested\_json, dict):  # Kiểm tra nếu là dictionary
-
-        for k, v in nested\_json.items():
-
-            new\_key = f"{parent\_key}{sep}{k}" if parent\_key else k
-
-            if isinstance(v, dict):  # Nếu giá trị là dict, tiếp tục giải nén
-
-                items.extend(flatten\_json(v, new\_key, sep=sep).items())
-
-            elif isinstance(v, list):  # Nếu giá trị là list, giải nén từng phần tử
-
-                for i, sub\_item in enumerate(v):
-
-                    items.extend(flatten\_json(sub\_item, f"{new\_key}{sep}{i}", sep=sep).items())
-
-            else:  # Nếu giá trị không phải dict hoặc list (ví dụ như số, chuỗi, boolean)
-
-                items.append((new\_key, v))
-
-    elif isinstance(nested\_json, list):  # Kiểm tra nếu là list
-
-        for i, sub\_item in enumerate(nested\_json):
-
-            items.extend(flatten\_json(sub\_item, f"{parent\_key}{sep}{i}", sep=sep).items())
-
-    else:
-
-        # Nếu giá trị là kiểu khác (ví dụ float, int, string), trả về giá trị trực tiếp
-
-        items.append((parent\_key, nested\_json))
-
-    return dict(items)
-
-def convert\_json\_to\_csv(json\_file, csv\_file):
-
-    """Chuyển đổi tệp JSON thành tệp CSV"""
-
-    with open(json\_file, 'r') as f:
-
-        data = json.load(f)
-
-    # Giải nén JSON lồng nhau
-
-    flat\_data = flatten\_json(data)
-
-    # Lưu dữ liệu vào CSV
-
-    with open(csv\_file, 'w', newline='', encoding='utf-8') as f:
-
-        writer = csv.DictWriter(f, fieldnames=flat\_data.keys())
-
-        writer.writeheader()
-
-        writer.writerow(flat\_data)
-
-def process\_json\_files\_in\_directory(data\_directory):
-
-    """Duyệt qua thư mục và chuyển đổi tất cả tệp JSON thành CSV"""
-
-    # Tìm tất cả tệp .json trong thư mục và các thư mục con
-
-    json\_files = glob.glob(os.path.join(data\_directory, '**', '*.json'), recursive=True)
-
-    for json\_file in json\_files:
-
-        csv\_file = json\_file.replace('.json', '.csv')
-
-        convert\_json\_to\_csv(json\_file, csv\_file)
-
-        print(f"Đã chuyển đổi {json\_file} thành {csv\_file}")
+def json_to_csv(json_file_path, csv_file_path):
+    """
+    Chuyển đổi một file JSON thành file CSV.
+    
+    Args:
+        json_file_path: Đường dẫn đến file JSON
+        csv_file_path: Đường dẫn để lưu file CSV
+    """
+    print(f"Đang chuyển đổi {json_file_path} -> {csv_file_path}")
+    
+    # Đọc file JSON
+    with open(json_file_path, 'r') as json_file:
+        json_data = json.load(json_file)
+    
+    # Làm phẳng JSON
+    flattened_data = flatten_json(json_data)
+    
+    # Lấy tất cả các khóa để làm tiêu đề cho CSV
+    fieldnames = flattened_data.keys()
+    
+    # Ghi ra file CSV
+    with open(csv_file_path, 'w', newline='') as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()  # Viết dòng tiêu đề
+        writer.writerow(flattened_data)  # Viết dòng dữ liệu
 
 def main():
+    """
+    Hàm chính thực hiện các bước xử lý:
+    1. Tìm tất cả file JSON trong thư mục data
+    2. Chuyển đổi chúng thành file CSV
+    """
+    # Đường dẫn gốc đến thư mục data
+    data_dir = 'data'
+    
+    # Tìm tất cả file .json trong data_dir và tất cả thư mục con của nó
+    # ** nghĩa là tìm kiếm đệ quy trong tất cả các thư mục con
+    # *.json nghĩa là tìm tất cả các file có đuôi .json
+    json_files = glob.glob(os.path.join(data_dir, '**', '*.json'), recursive=True)
+    
+    print(f"Danh sách file JSON tìm thấy bởi glob: {json_files}")
+    
+    print(f"Đã tìm thấy {len(json_files)} file JSON:")
+    for file in json_files:
+        print(f"  - {file}")
+    
+    # Duyệt qua từng file JSON và chuyển đổi nó thành CSV
+    for json_file in json_files:
+        # Tạo tên file CSV từ tên file JSON (thay đuôi .json thành .csv)
+        csv_file = json_file.replace('.json', '.csv')
+        
+        # Gọi hàm để chuyển đổi
+        json_to_csv(json_file, csv_file)
+    
+    print("\nHoàn tất chuyển đổi!")
 
-    # Thư mục chứa dữ liệu
-
-    data\_directory = './data'  # Thay đổi đường dẫn nếu cần
-
-    process\_json\_files\_in\_directory(data\_directory)
-
-if \_\_name\_\_ == "\_\_main\_\_":
-
-    main()
+if __name__ == "__main__":
+    main()
 ```
 
 > 4. Sau khi save file ` main.py`, thực thi lệnh `docker-compose up run`
 > 5. Kết quả sau khi thực hiện:
 
-![image](https://github.com/user-attachments/assets/52637e8a-7e04-48de-9cfc-7dc66e3c5ea5)
+![image](https://github.com/user-attachments/assets/51311436-0077-4ad4-af9c-9c9cb91bae90)
 
-![image](https://github.com/user-attachments/assets/ca55d07c-a19c-4235-aa86-2c2815547f2b)
+![image](https://github.com/user-attachments/assets/da9d720a-35b7-4a8d-9908-ba14146c8f8e)
 
-![image](https://github.com/user-attachments/assets/00fd665a-2b77-4ac1-9dc3-c069996521ad)
+![image](https://github.com/user-attachments/assets/188b1474-9f76-412d-87a9-68dab9ab4110)
+
 
 ## EXERCISE-5
 
