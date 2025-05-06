@@ -461,215 +461,166 @@ if __name__ == "__main__":
 
 > 1.Thay đổi đường dẫn thư mục tại CMD thành `Exercise-5`
 
-> 2. Chạy lệnh docker `build --tag=exercise-5 .` để build image Docker (Quá trình diễn ra trong 2 – 3 phút)
-> ![image](https://github.com/user-attachments/assets/3eb12b93-1146-4adf-bba8-5ad4cc3750fd)
+> 2. Chạy lệnh docker `build --tag=exercise-5 .` để build image Docker
+> ![image](https://github.com/user-attachments/assets/b75fd14b-9a7b-4de5-a087-e1dd36bdca41)
+
 
 #### Nội dung file main.py:
 ```
-import psycopg2
-import csv
+import psycopg2  # Thư viện để kết nối và thao tác với PostgreSQL
+import csv       # Đọc file CSV
+import uuid      # Thư viện tạo UUID (không dùng trong đoạn này nhưng có thể hữu ích sau)
+from datetime import datetime  # Để xử lý định dạng ngày tháng
+import os        # Thao tác với hệ thống file
+
+# Hàm tạo các bảng trong cơ sở dữ liệu nếu chưa tồn tại
+def create_tables(cur):
+    # Tạo bảng 'accounts'
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS accounts (
+            customer_id INT PRIMARY KEY,
+            first_name VARCHAR(50),
+            last_name VARCHAR(50),
+            address_1 VARCHAR(100),
+            address_2 VARCHAR(100),
+            city VARCHAR(50),
+            state VARCHAR(20),
+            zip_code VARCHAR(10),
+            join_date DATE
+        );
+    """)
+    # Tạo index cho trường 'last_name' để tăng tốc truy vấn
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_accounts_last_name ON accounts(last_name);")
+
+    # Tạo bảng 'products'
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS products (
+            product_id INT PRIMARY KEY,
+            product_code INT,
+            product_description VARCHAR(100)
+        );
+    """)
+    # Tạo index cho trường 'product_code'
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_products_code ON products(product_code);")
+
+    # Tạo bảng 'transactions'
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS transactions (
+            transaction_id TEXT PRIMARY KEY,
+            transaction_date DATE,
+            product_id INT REFERENCES products(product_id),
+            product_code INT,
+            product_description VARCHAR(100),
+            quantity INT,
+            account_id INT REFERENCES accounts(customer_id)
+        );
+    """)
+    # Tạo index để tối ưu truy vấn trên product_id và account_id
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_product_id ON transactions(product_id);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id);")
+
+
+# Hàm nhập dữ liệu từ các file CSV vào database
+def import_csv(cur, conn):
+    base_path = os.path.join(os.path.dirname(__file__), "data")  # Đường dẫn tới thư mục 'data'
+
+    # Nhập dữ liệu cho bảng 'accounts'
+    with open(os.path.join(base_path, "accounts.csv"), newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            cur.execute("""
+                INSERT INTO accounts (
+                    customer_id, first_name, last_name, address_1, address_2,
+                    city, state, zip_code, join_date
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (customer_id) DO NOTHING;  -- Nếu trùng khóa chính thì bỏ qua
+            """, (
+                int(row["customer_id"]),
+                row["first_name"],
+                row["last_name"],
+                row["address_1"],
+                row["address_2"] if row["address_2"] != "NaN" else None,  # Chuyển 'NaN' thành None
+                row["city"],
+                row["state"],
+                row["zip_code"],
+                datetime.strptime(row["join_date"], "%Y/%m/%d").date()  # Chuyển chuỗi thành kiểu DATE
+            ))
+        conn.commit()  # Lưu thay đổi sau khi chèn xong
+
+    # Nhập dữ liệu cho bảng 'products'
+    with open(os.path.join(base_path, "products.csv"), newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            cur.execute("""
+                INSERT INTO products (
+                    product_id, product_code, product_description
+                ) VALUES (%s, %s, %s)
+                ON CONFLICT (product_id) DO NOTHING;
+            """, (
+                int(row["product_id"]),
+                int(row["product_code"]),
+                row["product_description"]
+            ))
+        conn.commit()
+
+    # Nhập dữ liệu cho bảng 'transactions'
+    with open(os.path.join(base_path, "transactions.csv"), newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            cur.execute("""
+                INSERT INTO transactions (
+                    transaction_id, transaction_date, product_id, product_code,
+                    product_description, quantity, account_id
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (transaction_id) DO NOTHING;
+            """, (
+                row["transaction_id"],
+                datetime.strptime(row["transaction_date"], "%Y/%m/%d").date(),
+                int(row["product_id"]),
+                int(row["product_code"]),
+                row["product_description"],
+                int(row["quantity"]),
+                int(row["account_id"])
+            ))
+        conn.commit()
+
+
+# Hàm chính để chạy toàn bộ chương trình
+def main():
+    # Thông tin kết nối tới database
+    host = "postgres"
+    database = "postgres"
+    user = "postgres"
+    pas = "postgres"
+    conn = psycopg2.connect(host=host, database=database, user=user, password=pas)
+    cur = conn.cursor()
+
+    # Tạo bảng nếu chưa có
+    create_tables(cur)
+    conn.commit()
+
+    # Nhập dữ liệu từ CSV
+    import_csv(cur, conn)
+
+    print("✅ Tables created and CSV data imported successfully.")
+
+    # Đóng kết nối
+    cur.close()
+    conn.close()
+
+
+# Khi chạy file trực tiếp thì thực hiện hàm main()
+if __name__ == "__main__":
+    main()
 
-# Kết nối đến PostgreSQL
-conn = psycopg2.connect(
-
-    dbname="postgres",  # Tên cơ sở dữ liệu
-
-    user="postgres",    # Tên người dùng PostgreSQL
-
-    password="postgres",# Mật khẩu PostgreSQL
-
-    host="postgres",    # Máy chủ (PostgreSQL chạy trên localhost)
-
-    port="5432"         # Cổng PostgreSQL (mặc định)
-
-)
-
-# Tạo một con trỏ để thực thi các câu lệnh SQL
-
-with conn.cursor() as cur:
-
-    # 1. Xóa tất cả các ràng buộc khóa ngoại nếu có
-
-    remove\_constraints = """
-
-    ALTER TABLE IF EXISTS orders DROP CONSTRAINT IF EXISTS orders\_product\_id\_fkey;
-
-    """
-
-    cur.execute(remove\_constraints)
-
-    conn.commit()
-
-    # 2. Xóa các bảng nếu đã tồn tại
-
-    drop\_tables = """
-
-    DROP TABLE IF EXISTS transactions, accounts, products CASCADE;
-
-    """
-
-    cur.execute(drop\_tables)
-
-    conn.commit()
-
-    # 3. Tạo lại các bảng
-
-    create\_products\_table = """
-
-    CREATE TABLE IF NOT EXISTS products (
-
-        product\_id INT PRIMARY KEY,
-
-        product\_code VARCHAR(10),
-
-        product\_description VARCHAR(255)
-
-    );
-
-    """
-
-    
-
-    # Tạo bảng accounts
-
-    create\_accounts\_table = """
-
-    CREATE TABLE IF NOT EXISTS accounts (
-
-        customer\_id INT PRIMARY KEY,
-
-        first\_name VARCHAR(100),
-
-        last\_name VARCHAR(100),
-
-        address\_1 VARCHAR(255),
-
-        address\_2 VARCHAR(255),
-
-        city VARCHAR(100),
-
-        state VARCHAR(50),
-
-        zip\_code VARCHAR(20),
-
-        join\_date DATE
-
-    );
-
-    """
-
-    
-
-    # Tạo bảng transactions (sau khi bảng products đã được tạo)
-
-    create\_transactions\_table = """
-
-    CREATE TABLE IF NOT EXISTS transactions (
-
-        transaction\_id VARCHAR(50) PRIMARY KEY,
-
-        transaction\_date DATE,
-
-        product\_id INT,
-
-        product\_code VARCHAR(10),
-
-        product\_description VARCHAR(255),
-
-        quantity INT,
-
-        account\_id INT
-
-    );
-
-    """
-
-    
-
-    # 4. Chạy các câu lệnh tạo bảng
-
-    print("Creating products table...")
-
-    cur.execute(create\_products\_table)  # Đảm bảo tạo bảng products trước
-
-    print("Creating accounts table...")
-
-    cur.execute(create\_accounts\_table)
-
-    print("Creating transactions table...")
-
-    cur.execute(create\_transactions\_table)
-
-    # Commit changes
-
-    conn.commit()
-
-    # 5. Thêm khóa ngoại sau khi các bảng đã được tạo
-
-    add\_foreign\_keys = """
-
-    ALTER TABLE transactions
-
-    ADD CONSTRAINT fk\_product\_id FOREIGN KEY (product\_id) REFERENCES products(product\_id) ON DELETE CASCADE,
-
-    ADD CONSTRAINT fk\_account\_id FOREIGN KEY (account\_id) REFERENCES accounts(customer\_id) ON DELETE CASCADE;
-
-    """
-
-    print("Adding foreign key constraints...")
-
-    cur.execute(add\_foreign\_keys)
-
-    
-
-    # Commit changes
-
-    conn.commit()
-
-    # 6. Chèn dữ liệu từ CSV vào các bảng
-
-    def load\_data\_from\_csv(csv\_file, table\_name, columns):
-
-        with open(csv\_file, 'r') as file:
-
-            reader = csv.reader(file)
-
-            next(reader)  # Bỏ qua dòng tiêu đề (header row)
-
-            
-
-            for row in reader:
-
-                # Tạo câu truy vấn để chèn dữ liệu
-
-                query = f"INSERT INTO {table\_name} ({', '.join(columns)}) VALUES ({', '.join(['%s'] * len(columns))})"
-
-                cur.execute(query, row)
-
-        
-
-        conn.commit()
-
-    # 7. Chèn dữ liệu cho từng bảng
-
-    load\_data\_from\_csv("data/accounts.csv", "accounts", ["customer\_id", "first\_name", "last\_name", "address\_1", "address\_2", "city", "state", "zip\_code", "join\_date"])
-
-    load\_data\_from\_csv("data/products.csv", "products", ["product\_id", "product\_code", "product\_description"])
-
-    load\_data\_from\_csv("data/transactions.csv", "transactions", ["transaction\_id", "transaction\_date", "product\_id", "product\_code", "product\_description", "quantity", "account\_id"])
-
-# 8. Đóng kết nối
-
-conn.close()
-
-print("Data has been loaded successfully.")
 ```
 
 > 3. Sau khi lưu lại, thực thi lệnh `docker-compose up run`
 > 4. Kết quả sau khi thực hiện:
-![image](https://github.com/user-attachments/assets/e4013e15-1978-4dff-926d-69ac7c8b3a3e)
-> Truy vấn các bảng vừa tạo trong DBeaver
-![image](https://github.com/user-attachments/assets/5ead3335-5ae2-4cee-b049-52af90313eae)
+![image](https://github.com/user-attachments/assets/4625ce20-fb40-49e9-b9c0-be0f6bb9acbf)
+
+> Truy vấn các bảng vừa tạo trong container posgres-1
+![image](https://github.com/user-attachments/assets/e70ea051-15fc-4f1b-9cbd-0e3e85bf7830)
 
 ## PIPELINE TỰ ĐỘNG THỰC HIỆN BÀI TẬP 1- 5
 #### Code cho pipeline.py:
