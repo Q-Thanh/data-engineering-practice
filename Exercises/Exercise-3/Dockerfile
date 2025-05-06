@@ -1,6 +1,6 @@
-FROM python:latest
+FROM python:3.12
 
-WORKDIR app
+WORKDIR /app
 COPY . /app
 
-RUN python3 -m pip install -r requirements.txt
+RUN python3 -m pip install --no-cache-dir -r requirements.txt
