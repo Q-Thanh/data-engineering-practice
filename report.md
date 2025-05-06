@@ -622,6 +622,313 @@ if __name__ == "__main__":
 > Truy vấn các bảng vừa tạo trong container posgres-1
 ![image](https://github.com/user-attachments/assets/e70ea051-15fc-4f1b-9cbd-0e3e85bf7830)
 
+## EXERCISE-6
+
+> 1.Thay đổi đường dẫn thư mục tại CMD thành `Exercise-6`
+
+> 2. Chạy lệnh docker `build --tag=exercise-6 .` để build image Docker
+> ![image](https://github.com/user-attachments/assets/ea903df1-68b0-4178-9312-79ee1c5e2cbe)
+
+#### Nội dung file main.py:
+```
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import avg, count, to_date, date_format, col, desc, expr
+from pyspark.sql.window import Window
+import zipfile
+import glob
+import os
+
+# Hàm giải nén các file zip trong thư mục data vào thư mục output
+def unzip_files(data_folder, output_folder):
+    # Tạo thư mục giải nén nếu chưa có
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    # Tìm tất cả file .zip trong thư mục data
+    zip_files = glob.glob(f"{data_folder}/*.zip")
+    for zip_path in zip_files:
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            print(f"Unzipping: {zip_path} into {output_folder}")
+            zip_ref.extractall(output_folder)
+
+
+# Hàm đọc dữ liệu CSV từ thư mục đã giải nén
+def read_data(spark, unzipped_folder):
+    # Đọc tất cả file CSV trong thư mục đã giải nén
+    csv_files = glob.glob(f"{unzipped_folder}/*.csv")
+    df = spark.read.csv(csv_files, header=True, inferSchema=True)  # Đọc CSV và tự suy đoán schema
+    return df
+
+
+# Báo cáo: Thời lượng chuyến đi trung bình theo ngày
+def average_trip_duration_per_day(df, reports_folder):
+    result = (
+        df.withColumn("date", to_date("start_time"))  # Thêm cột ngày từ start_time
+          .groupBy("date")
+          .agg(avg("tripduration").alias("avg_trip_duration"))  # Tính trung bình thời lượng
+          .orderBy("date")
+    )
+    # Lưu kết quả ra file CSV
+    result.write.csv(f"{reports_folder}/average_trip_duration_per_day", header=True, mode="overwrite")
+
+
+# Báo cáo: Số chuyến đi theo ngày
+def trips_per_day(df, reports_folder):
+    result = (
+        df.withColumn("date", to_date("start_time"))
+          .groupBy("date")
+          .agg(count("*").alias("trip_count"))  # Đếm số chuyến mỗi ngày
+          .orderBy("date")
+    )
+    result.write.csv(f"{reports_folder}/trips_per_day", header=True, mode="overwrite")
+
+
+# Báo cáo: Trạm xuất phát phổ biến nhất theo tháng
+def most_popular_start_station_per_month(df, reports_folder):
+    result = (
+        df.withColumn("month", date_format("start_time", "yyyy-MM"))  # Tạo cột tháng dạng yyyy-MM
+          .groupBy("month", "from_station_name")
+          .agg(count("*").alias("trip_count"))
+    )
+    # Xác định trạm có nhiều chuyến nhất trong mỗi tháng
+    window = Window.partitionBy("month").orderBy(desc("trip_count"))
+    ranked = result.withColumn("rank", expr("row_number() over (partition by month order by trip_count desc)"))
+    top_stations = ranked.filter(col("rank") == 1).drop("rank")
+    top_stations.write.csv(f"{reports_folder}/most_popular_start_station_per_month", header=True, mode="overwrite")
+
+
+# Báo cáo: Top 3 trạm xuất phát theo từng ngày trong 2 tuần gần nhất
+def top_3_trip_stations_last_two_weeks(df, reports_folder):
+    max_date = df.select(to_date("start_time").alias("date")).agg({"date": "max"}).collect()[0][0]
+    window_start = expr(f"date_sub('{max_date}', 13)")  # 14 ngày gần nhất (13 + ngày hiện tại)
+
+    # Lọc dữ liệu của 14 ngày gần nhất
+    recent_df = df.withColumn("date", to_date("start_time")).filter(col("date") >= window_start)
+    result = (
+        recent_df.groupBy("date", "from_station_name")
+                 .agg(count("*").alias("trip_count"))
+    )
+    window = Window.partitionBy("date").orderBy(desc("trip_count"))
+    ranked = result.withColumn("rank", expr("row_number() over (partition by date order by trip_count desc)"))
+    top_3 = ranked.filter(col("rank") <= 3)
+    top_3.write.csv(f"{reports_folder}/top_3_trip_stations_last_two_weeks", header=True, mode="overwrite")
+
+
+# Báo cáo: Thời lượng chuyến đi trung bình theo giới tính
+def avg_trip_duration_by_gender(df, reports_folder):
+    result = (
+        df.groupBy("gender")
+          .agg(avg("tripduration").alias("avg_trip_duration"))
+    )
+    result.write.csv(f"{reports_folder}/avg_trip_duration_by_gender", header=True, mode="overwrite")
+
+
+# Báo cáo: Top 10 độ tuổi có thời lượng chuyến đi dài nhất và ngắn nhất
+def top_10_ages_by_trip_duration(df, reports_folder):
+    df_with_age = df.withColumn("age", 2019 - col("birthyear"))  # Tính tuổi từ năm sinh (năm 2019)
+    result = (
+        df_with_age.groupBy("age")
+                   .agg(avg("tripduration").alias("avg_trip_duration"))
+                   .filter(col("age").isNotNull())
+    )
+    # Top 10 tuổi có thời lượng chuyến đi dài nhất
+    longest = result.orderBy(desc("avg_trip_duration")).limit(10)
+    # Top 10 tuổi có thời lượng chuyến đi ngắn nhất
+    shortest = result.orderBy("avg_trip_duration").limit(10)
+
+    longest.write.csv(f"{reports_folder}/top_10_ages_longest_trips", header=True, mode="overwrite")
+    shortest.write.csv(f"{reports_folder}/top_10_ages_shortest_trips", header=True, mode="overwrite")
+
+
+# Hàm chính để chạy toàn bộ pipeline
+def main():
+    # Khởi tạo SparkSession
+    spark = SparkSession.builder.appName("Exercise6").enableHiveSupport().getOrCreate()
+
+    data_folder = "./data"
+    unzipped_folder = "./unzipped"
+    reports_folder = "./reports"
+
+    # Bước 1: Giải nén file zip
+    unzip_files(data_folder, unzipped_folder)
+
+    # Bước 2: Đọc dữ liệu CSV đã giải nén
+    df = read_data(spark, unzipped_folder)
+
+    # Bước 3: Tạo thư mục reports nếu chưa có
+    if not os.path.exists(reports_folder):
+        os.makedirs(reports_folder)
+
+    # Bước 4: Chạy các báo cáo
+    average_trip_duration_per_day(df, reports_folder)
+    trips_per_day(df, reports_folder)
+    most_popular_start_station_per_month(df, reports_folder)
+    top_3_trip_stations_last_two_weeks(df, reports_folder)
+    avg_trip_duration_by_gender(df, reports_folder)
+    top_10_ages_by_trip_duration(df, reports_folder)
+
+
+# Khi chạy file trực tiếp thì thực hiện hàm main()
+if __name__ == "__main__":
+    main()
+
+```
+
+> 3. Sau khi lưu lại, thực thi lệnh `docker-compose up -d`
+> 4. Kết quả sau khi thực hiện:
+![image](https://github.com/user-attachments/assets/a31c4a3c-853a-4c33-9c84-4ff1e1804d46)
+
+> Kiểm tra kết quả trong thư mục Exercise-6
+![image](https://github.com/user-attachments/assets/d70d9e5e-ccdc-4b48-a097-62bb86ca312c)
+> 
+![image](https://github.com/user-attachments/assets/39a41541-819b-484e-98dc-e51127f0b958)
+
+![image](https://github.com/user-attachments/assets/db89e4c9-4475-4b08-8530-e69da4e350ca)
+
+![image](https://github.com/user-attachments/assets/6826218e-5909-412b-8103-fed03265e556)
+
+![image](https://github.com/user-attachments/assets/5316a4f2-f0bd-41a9-97ac-77d4a0428d49)
+
+## EXERCISE-7
+
+> 1.Thay đổi đường dẫn thư mục tại CMD thành `Exercise-7`
+
+> 2. Chạy lệnh docker `build --tag=exercise-7 .` để build image Docker
+> ![image](https://github.com/user-attachments/assets/805dcbde-f8c7-4e6e-be81-3c9a93b6300d)
+
+#### Nội dung file main.py:
+```
+from pyspark.sql import SparkSession, DataFrame
+import pyspark.sql.functions as F
+from pyspark.sql import Window
+import tempfile
+import zipfile
+import os
+
+
+def unzip_to_temp(zip_path):
+    temp_dir = tempfile.mkdtemp()  # Tạo một thư mục tạm thời
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        # Lọc ra file CSV thật sự (bỏ qua thư mục _MACOSX hoặc file rác)
+        csv_files = [f for f in zip_ref.namelist() if f.endswith('.csv') and not f.startswith('__MACOSX')]
+        
+        print("Found CSV files:", csv_files)
+        
+        if len(csv_files) != 1:
+            # Nếu không tìm thấy đúng 1 file CSV, raise lỗi
+            raise ValueError(f"Expected exactly one CSV file inside the zip, but found {len(csv_files)}: {csv_files}")
+        
+        extracted_path = zip_ref.extract(csv_files[0], temp_dir)  # Giải nén file CSV ra thư mục tạm
+    return extracted_path
+
+
+def read_csv(spark: SparkSession, csv_path: str) -> DataFrame:
+    """Đọc file CSV đã giải nén."""
+    return spark.read.option("header", True).csv(csv_path)
+
+
+def add_source_file(df: DataFrame, source_file: str) -> DataFrame:
+    """Thêm cột source_file để ghi lại tên file nguồn."""
+    return df.withColumn("source_file", F.lit(source_file))
+
+
+def extract_file_date(df: DataFrame) -> DataFrame:
+    """Trích xuất ngày từ cột source_file và tạo cột file_date."""
+    return df.withColumn(
+        "file_date",
+        F.to_date(
+            F.regexp_extract("source_file", r"(\d{4}-\d{2}-\d{2})", 1),  # Lấy chuỗi ngày định dạng yyyy-MM-dd
+            "yyyy-MM-dd"
+        )
+    )
+
+
+def add_brand(df: DataFrame) -> DataFrame:
+    """Thêm cột brand dựa trên cột model (lấy từ đầu tiên của model)."""
+    return df.withColumn(
+        "brand",
+        F.when(
+            F.instr(F.col("model"), " ") > 0,  # Nếu model có chứa dấu cách
+            F.split(F.col("model"), " ").getItem(0)  # Lấy từ đầu tiên làm brand
+        ).otherwise(F.lit("unknown"))  # Nếu không có dấu cách, gán là 'unknown'
+    )
+
+
+def add_storage_ranking(df: DataFrame) -> DataFrame:
+    """Thêm cột storage_ranking dựa vào capacity_bytes và model."""
+    window_spec = F.row_number().over(
+        Window.orderBy(F.col("capacity_bytes").cast("long").desc())
+    )
+
+    # Tính max_capacity theo từng model và xếp hạng giảm dần
+    ranking_df = (
+        df.groupBy("model")
+        .agg(F.max(F.col("capacity_bytes").cast("long")).alias("max_capacity"))
+        .orderBy(F.col("max_capacity").desc())
+    ).withColumn("storage_ranking", F.row_number().over(Window.orderBy(F.col("max_capacity").desc())))
+
+    # Join bảng ranking vào bảng chính theo model để có cột storage_ranking
+    df_with_rank = df.join(ranking_df.select("model", "storage_ranking"), on="model", how="left")
+
+    return df_with_rank
+
+
+def add_primary_key(df: DataFrame) -> DataFrame:
+    """Tạo cột primary_key là hash SHA-256 từ các cột định danh."""
+    identifying_cols = ["date", "serial_number", "model"]
+    return df.withColumn(
+        "primary_key",
+        F.sha2(F.concat_ws("||", *[F.col(c).cast("string") for c in identifying_cols]), 256)
+    )
+
+
+def process_data(spark: SparkSession, zip_path: str) -> DataFrame:
+    # Giải nén file zip ra thư mục tạm
+    csv_path = unzip_to_temp(zip_path)
+    file_name = os.path.basename(zip_path)
+
+    # Đọc dữ liệu CSV
+    df = read_csv(spark, csv_path)
+
+    # Thực hiện các bước transform dữ liệu
+    df = add_source_file(df, file_name)
+    df = extract_file_date(df)
+    df = add_brand(df)
+    df = add_storage_ranking(df)
+    df = add_primary_key(df)
+
+    return df
+
+
+def main():
+    # Tạo SparkSession với Hive support
+    spark = SparkSession.builder.appName("Exercise7").enableHiveSupport().getOrCreate()
+
+    # Đường dẫn tới file zip cần xử lý
+    zip_path = "./data/hard-drive-2022-01-01-failures.csv.zip"
+
+    # Xử lý dữ liệu
+    df = process_data(spark, zip_path)
+
+    # Hiển thị kết quả cuối cùng
+    df.show(truncate=False)
+    df.printSchema()
+
+
+if __name__ == "__main__":
+    main()
+
+
+```
+
+> 3. Sau khi lưu lại, thực thi lệnh `docker-compose up run`
+> 4. Kết quả sau khi thực hiện:
+![image](https://github.com/user-attachments/assets/bffb8e3e-796a-4edd-93d4-afe3369bfe28)
+
+![image](https://github.com/user-attachments/assets/5be671c8-0e84-4040-a460-f5e1b4499f95)
+
+![image](https://github.com/user-attachments/assets/b6a10cb7-eb6a-477f-933e-2557aad58e1e)
+
 ## PIPELINE TỰ ĐỘNG THỰC HIỆN BÀI TẬP 1- 5
 #### Code cho pipeline.py:
 ```
