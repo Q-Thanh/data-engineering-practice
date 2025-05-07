@@ -627,14 +627,14 @@ print("Data has been loaded successfully.")
 > Truy vấn các bảng vừa tạo trong DBeaver
 ![image](https://github.com/user-attachments/assets/5ead3335-5ae2-4cee-b049-52af90313eae)
 
-## PIPELINE TỰ ĐỘNG THỰC HIỆN BÀI TẬP 1- 5
+## PIPELINE TỰ ĐỘNG THỰC HIỆN BÀI TẬP 1 - 7
 #### Code cho pipeline.py:
 ```
 import os
 import subprocess
 
 # List các Exercise bạn muốn chạy
-exercises = ['Exercise-1', 'Exercise-2', 'Exercise-3', 'Exercise-4', 'Exercise-5']
+exercises = ['exercise-1', 'exercise-2', 'exercise-3', 'exercise-4', 'exercise-5', 'exercise-6', 'exercise-7']
 
 # Hàm kiểm tra xem image đã có chưa
 def check_image_exists(image_name):
@@ -644,7 +644,7 @@ def check_image_exists(image_name):
 # Hàm build image nếu chưa có
 def build_image(exercise_name):
     print(f"Image {exercise_name} chưa có, bắt đầu build...")
-    result = subprocess.run(['docker', 'build', '-t', exercise_name, f'D:/NMKTDL/data-engineering-practice-main/Exercises/{exercise_name}'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run(['docker', 'build', '-t', exercise_name, f'D:/Learning/Data_Engineering/labs/data-engineering-practice/Exercises/{exercise_name}'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
         print(f"Build image {exercise_name} thất bại. Dừng pipeline.")
         print(result.stderr.decode())
@@ -654,7 +654,7 @@ def build_image(exercise_name):
 # Hàm chạy docker-compose
 def run_docker_compose(exercise_name):
     print(f"Đang chạy {exercise_name} bằng image {exercise_name}...")
-    compose_file = f'D:/NMKTDL/data-engineering-practice-main/Exercises/{exercise_name}/docker-compose.yml'
+    compose_file = f'D:/Learning/Data_Engineering/labs/data-engineering-practice/Exercises/{exercise_name}/docker-compose.yml'
     result = subprocess.run(['docker-compose', '-f', compose_file, 'up'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
         print(f"Lỗi khi chạy {exercise_name}. Dừng pipeline.")
@@ -687,28 +687,40 @@ if __name__ == "__main__":
 ```
 > #### Kết quả thực hiện:
 > ##### Exercise-1
-> ![image](https://github.com/user-attachments/assets/63d6cecb-88f2-48c4-816d-1dfc4b767f61)
-> ##### Exercise-2 & 3
-> ![image](https://github.com/user-attachments/assets/fedd1e65-6da1-4dc1-b9c3-ad1e2b8f21a3)
+> ![image](https://github.com/user-attachments/assets/78874d46-892b-471b-bec8-041c6c4d8f71)
+> ##### Exercise-2
+> ![image](https://github.com/user-attachments/assets/2671da4a-bd5b-449c-a58d-31195c3ff4be)
+> ##### Exercise-3
+> ![image](https://github.com/user-attachments/assets/75188044-102a-4b3c-b9f8-66c0d016ea91)
+> ![image](https://github.com/user-attachments/assets/a84e7e69-4984-4733-abd3-931abfcd7f86)
 > ##### Exercise-4
-> ![image](https://github.com/user-attachments/assets/71196633-75a3-4ead-b33b-21cdd6eafd2f)
-> 
+> ![image](https://github.com/user-attachments/assets/3db39c2e-ee28-4781-877e-0511e8226718)
+> ##### Exercise-5
+> ![image](https://github.com/user-attachments/assets/290f4879-b18c-4b76-b98f-439b27a03007)
+> ##### Exercise-6
+> ![image](https://github.com/user-attachments/assets/0dece1b5-7fb8-4185-9fbd-88b75a8c60d5)
+> ##### Exercise-7
+> ![image](https://github.com/user-attachments/assets/1b7be7e4-1b09-41fe-a859-02c14c7fe413)
+
+> Thực thi lệnh `docker-compose up run`
+> Kết quả sau khi thực thi
+> ![image](https://github.com/user-attachments/assets/7205a611-3843-4dec-8ee4-507541ea858b)
 
 ### CẤU TRÚC THƯ MỤC ĐỂ CHẠY DAG AIRFLOW
 ```
-data-engineering-practice-Le_Trung_Huu/
+data-engineering-practice/
 │
 ├── dags/                    ← 📂 Chứa pipeline_dag.py
 │   └── pipeline_dag.py  
 │
 ├── Exercises/                   ← 📂 Chứa các bài tập với Dockerfile riêng
 │   ├── Exercise-1/
-│   │   ├── main.py 
 │   ├── Exercise-2/
-│   │   ├── main.py 
 │   ├── Exercise-3/
 │   ├── Exercise-4/
-│   └── Exercise-5/
+│   ├── Exercise-5/
+│   ├── Exercise-6/
+│   └── Exercise-7/
 │
 ├── pipeline.py                  ← 📄 Code pipeline gốc nếu muốn gọi ngoài Airflow
 └── requirements.txt
@@ -876,7 +888,5 @@ with DAG(
 ```
 
 ### KẾT QUẢ SAU KHI CHẠY DAG
->![image](https://github.com/user-attachments/assets/749ac8e5-5aea-428b-b2b4-df0cf866040c)
-
-> ![image](https://github.com/user-attachments/assets/b889a380-7201-49db-af30-2384068a9653)
->![image](https://github.com/user-attachments/assets/5c9d74f3-9391-4b29-8a4a-6bc10718b474)
+>![image](https://github.com/user-attachments/assets/ffce84f1-3fe2-4dfa-bbbc-2ad4f221ab4e)
+>![image](https://github.com/user-attachments/assets/4677cb06-ff6f-40b0-900b-aa282a9b8360)
