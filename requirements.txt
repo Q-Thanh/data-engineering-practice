@@ -1,0 +1,8 @@
+requests==2.27.1
+pandas==2.2.3
+beautifulsoup4
+lxml
+boto3
+psycopg2
+pytest
+pyspark
